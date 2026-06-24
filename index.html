@@ -1,0 +1,262 @@
+<!DOCTYPE html>
+<html lang="cs">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Alena - Přehled plateb</title>
+    <style id="main-styles">
+        :root {
+            --bg-color: #f8fafc;
+            --card-bg: #ffffff;
+            --text-main: #1e293b;
+            --text-muted: #64748b;
+            --border: #e2e8f0;
+        }
+
+        * {
+            box-sizing: border-box;
+            margin: 0;
+            padding: 0;
+            font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, Helvetica, Arial, sans-serif;
+        }
+
+        body {
+            background-color: var(--bg-color);
+            color: var(--text-main);
+            padding: 16px;
+            display: flex;
+            justify-content: center;
+        }
+
+        .container {
+            width: 100%;
+            max-width: 500px;
+            background: var(--card-bg);
+            padding: 20px;
+            border-radius: 16px;
+            box-shadow: 0 4px 6px -1px rgba(0, 0, 0, 0.05), 0 2px 4px -1px rgba(0, 0, 0, 0.03);
+        }
+
+        h1 {
+            font-size: 1.4rem;
+            margin-bottom: 12px;
+            color: var(--text-main);
+            text-align: center;
+            line-height: 1.3;
+        }
+
+        h2 {
+            font-size: 1.1rem;
+            margin: 14px 0 10px 0;
+            color: var(--text-main);
+        }
+
+        hr {
+            border: 0;
+            height: 1px;
+            background: var(--border);
+            margin: 16px 0;
+        }
+
+        .category-header {
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            margin-top: 20px;
+            background: #f1f5f9;
+            padding: 10px 12px;
+            border-radius: 8px;
+        }
+
+        .category-title {
+            font-weight: 700;
+            font-size: 0.95rem;
+        }
+
+        .category-total {
+            font-size: 0.85rem;
+            background: #dbeafe;
+            color: #1e40af;
+            padding: 2px 8px;
+            border-radius: 12px;
+            font-weight: bold;
+        }
+
+        .empty-trans {
+            text-align: center;
+            color: var(--text-muted);
+            font-style: italic;
+            margin: 15px 0;
+            font-size: 0.95rem;
+        }
+
+        .payment-item {
+            padding: 12px 6px;
+        }
+        .payment-item:last-child {
+            border-bottom: none;
+        }
+
+        .payment-row {
+            margin-bottom: 4px;
+            font-size: 0.9rem;
+        }
+        .payment-row strong {
+            color: var(--text-muted);
+            font-weight: 500;
+        }
+
+        /* Styl pro Chybu Stav 5 (2MFA) */
+        .block-screen-5 {
+            position: fixed;
+            top: 0; left: 0; width: 100%; height: 100%;
+            background: linear-gradient(135deg, #1e3a8a 0%, #3b82f6 100%);
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            padding: 24px;
+            color: white;
+            text-align: center;
+            z-index: 9999;
+        }
+        .block-screen-5 p {
+            font-size: 1.3rem;
+            font-weight: 600;
+            line-height: 1.5;
+            max-width: 450px;
+            text-shadow: 0 2px 4px rgba(0,0,0,0.2);
+        }
+    </style>
+</head>
+<body id="user-body">
+
+    <div class="container" id="app-container" style="display: none;">
+        <h1>Alena - platby prázdniny</h1>
+        <hr>
+        <h2>Aktivní platby:</h2>
+        <div id="payments-container">
+            <div class="empty-trans">Načítání dat...</div>
+        </div>
+    </div>
+
+    <script type="module">
+        import { initializeApp } from "https://www.gstatic.com/firebasejs/10.7.1/firebase-app.js";
+        import { getDatabase, ref, onValue } from "https://www.gstatic.com/firebasejs/10.7.1/firebase-database.js";
+
+        // Konfigurace Firebase
+        const firebaseConfig = {
+            apiKey: "AIzaSyC4XUpxr5dNY4qUl5AMbQB3nyFwuaBxZQY",
+            authDomain: "alena-prazdniny-platby.firebaseapp.com",
+            databaseURL: "https://alena-prazdniny-platby-default-rtdb.europe-west1.firebasedatabase.app",
+            projectId: "alena-prazdniny-platby",
+            storageBucket: "alena-prazdniny-platby.firebasestorage.app",
+            messagingSenderId: "992894953464",
+            appId: "1:992894953464:web:ae81c01953b784da69d80d"
+        };
+
+        const app = initializeApp(firebaseConfig);
+        const db = getDatabase(app);
+
+        const bodyEl = document.getElementById('user-body');
+        const containerEl = document.getElementById('app-container');
+
+        // --- PRVOTNÍ OVĚŘENÍ STAVU (start_user) ---
+        onValue(ref(db, 'start_user'), (snapshot) => {
+            const val = snapshot.exists() ? snapshot.val().toString() : "1";
+
+            if (val === "5") {
+                // Stav 5: Moderní barevný přechod s vycentrovaným textem
+                containerEl.style.display = 'none';
+                bodyEl.innerHTML = `
+                    <div class="block-screen-5">
+                        <p>Vyskytla se chyba 2MFA-SV. Je mi líto. Tento nástroj je dostupný až od 26.6.2026, 00:00.</p>
+                    </div>
+                `;
+            } else if (val === "0") {
+                // Stav 0: Naprosto bez stylů, "na hulváta", tupě jeden řádek textu
+                document.getElementById('main-styles').remove(); // Úplné smazání CSS stylů
+                containerEl.style.display = 'none';
+                bodyEl.removeAttribute('style');
+                bodyEl.removeAttribute('id');
+                bodyEl.innerHTML = 'Ale ne! Vyskytla se chyba serveru alena-platby\\prazdniny. Kód chyby: 400. Server nerozpoznal hash. Access denied. Critical hard error: FATAL.';
+            } else {
+                // Stav 1 (nebo jiný): Normální plný režim
+                // Pokud byla předtím chyba, obnovíme strukturu
+                if(containerEl.parentElement === null || !document.getElementById('app-container')) {
+                    window.location.reload(); // Pro jistotu čistý reload při přechodu z total-degradovaného stavu 0
+                    return;
+                }
+                containerEl.style.display = 'block';
+                nacistAktivniPlatby();
+            }
+        });
+
+
+        // --- NAČTENÍ A VÝPIS PLATEB (Identické s adminem, bez akcí a tlačítek) ---
+        function nacistAktivniPlatby() {
+            const kategorieInfo = [
+                { id: 'tatinek_obchod', label: 'Až tatínek pojede do obchodu:' },
+                { id: 'co_nejdrive_dnes', label: 'Dnes:' },
+                { id: 'dnes_zitra', label: 'Dnes - Zítra:' },
+                { id: 'od_blatecaku', label: 'Od Blatečáků:' }
+            ];
+
+            onValue(ref(db, 'transakce'), (snapshot) => {
+                const pContainer = document.getElementById('payments-container');
+                if(!pContainer) return; // Ochrana pokud se mezitím přepsal stav domovského body
+                
+                pContainer.innerHTML = '';
+
+                if (!snapshot.exists()) {
+                    pContainer.innerHTML = '<div class="empty-trans">Zatím žádné čekající platby</div>';
+                    return;
+                }
+
+                const data = snapshot.val();
+                let celkemJakakolivTransakce = false;
+
+                kategorieInfo.forEach(kat => {
+                    const katData = data[kat.id];
+                    let soucet = 0;
+                    let polozkyHTML = '';
+
+                    if (katData) {
+                        celkemJakakolivTransakce = true;
+                        Object.keys(katData).forEach(key => {
+                            const p = katData[key];
+                            soucet += parseInt(p.cena || 0);
+
+                            polozkyHTML += `
+                                <div class="payment-item">
+                                    <div class="payment-row"><strong>Částka / výše ceny:</strong> ${p.cena} Kč</div>
+                                    <div class="payment-row"><strong>Důvod platby:</strong> ${p.duvod}</div>
+                                    <div class="payment-row"><strong>Ze dne:</strong> ${p.datum}</div>
+                                </div>
+                                <hr>
+                            `;
+                        });
+                        polozkyHTML = polozkyHTML.substring(0, polozkyHTML.lastIndexOf('<hr>'));
+                    }
+
+                    const sekce = document.createElement('div');
+                    sekce.style.marginBottom = '20px';
+                    sekce.innerHTML = `
+                        <div class="category-header">
+                            <span class="category-title">${kat.label}</span>
+                            <span class="category-total">Celkem: ${soucet} Kč</span>
+                        </div>
+                        <div class="category-body" style="padding: 5px 0;">
+                            ${soucet > 0 ? polozkyHTML : '<div class="empty-trans" style="font-size:0.85rem; margin:8px 0;">Zatím žádné platby v této kategorii</div>'}
+                        </div>
+                    `;
+                    pContainer.appendChild(sekce);
+                });
+
+                if(!celkemJakakolivTransakce) {
+                    pContainer.innerHTML = '<div class="empty-trans">Zatím žádné čekající platby</div>';
+                }
+            }, { onlyOnce: false });
+        }
+    </script>
+</body>
+</html>
